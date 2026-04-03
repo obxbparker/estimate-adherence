@@ -1,4 +1,59 @@
 (() => {
+    const STORAGE_KEY = 'estimate-adherence';
+    const PASSWORD = 'outerbox2026';
+
+    // =========================================================
+    // Auth
+    // =========================================================
+
+    const loginScreen = document.getElementById('login-screen');
+    const app = document.getElementById('app');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+
+    function isAuthenticated() {
+        return sessionStorage.getItem(STORAGE_KEY + ':auth') === '1';
+    }
+
+    function showLogin() {
+        loginScreen.classList.remove('hidden');
+        app.classList.add('hidden');
+    }
+
+    function showApp() {
+        loginScreen.classList.add('hidden');
+        app.classList.remove('hidden');
+        loadInitialData();
+    }
+
+    if (isAuthenticated()) {
+        showApp();
+    } else {
+        showLogin();
+    }
+
+    loginForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const pw = document.getElementById('password').value;
+        if (pw === PASSWORD) {
+            sessionStorage.setItem(STORAGE_KEY + ':auth', '1');
+            showApp();
+        } else {
+            loginError.textContent = 'Incorrect password';
+            loginError.classList.remove('hidden');
+        }
+    });
+
+    document.getElementById('logout-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        sessionStorage.removeItem(STORAGE_KEY + ':auth');
+        showLogin();
+    });
+
+    // =========================================================
+    // DOM refs
+    // =========================================================
+
     const fileInput = document.getElementById('file-input');
     const loading = document.getElementById('loading');
     const errorEl = document.getElementById('error');
@@ -16,8 +71,238 @@
     let excludedAssignees = new Set();
     let teams = [];
     let viewMode = 'individual';
+    let defaultTeams = []; // from teams.json
 
-    // --- File input (header button + empty state button) ---
+    // =========================================================
+    // CSV Parsing (ported from PHP)
+    // =========================================================
+
+    function parseTime(val) {
+        if (!val) return 0;
+        val = val.trim();
+        if (val === '') return 0;
+        let total = 0;
+        let m;
+        if ((m = val.match(/(\d+)\s*h/))) total += parseInt(m[1]) * 60;
+        if ((m = val.match(/(\d+)\s*m/))) total += parseInt(m[1]);
+        return total;
+    }
+
+    function formatTime(minutes) {
+        if (minutes === 0) return '';
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        if (h && m) return `${h}h ${m}m`;
+        if (h) return `${h}h`;
+        return `${m}m`;
+    }
+
+    function parseAssignees(val) {
+        if (!val) return [];
+        val = val.replace(/^\[|\]$/g, '').trim();
+        if (val === '') return [];
+        return val.split(',').map(s => s.trim()).filter(s => s);
+    }
+
+    function parseCSV(text) {
+        // Remove BOM if present
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+        const rows = csvToRows(text);
+        if (rows.length < 2) return { error: 'Empty CSV' };
+
+        const headers = rows[0];
+        const col = {};
+        headers.forEach((h, i) => col[h] = i);
+
+        const assigneeData = {};
+        let totalComplete = 0;
+        let excludedNoEstimate = 0;
+        let excludedNoAssignee = 0;
+
+        for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            const status = (row[col['Status']] || '').trim();
+            if (status.toLowerCase() !== 'complete') continue;
+
+            totalComplete++;
+
+            const assignees = parseAssignees(row[col['Assignee']] || '');
+            if (assignees.length === 0) {
+                excludedNoAssignee++;
+                continue;
+            }
+
+            const timeEst = parseTime(row[col['Time Estimate']] || '');
+            const timeLog = parseTime(row[col['Time Logged']] || '');
+
+            if (timeEst === 0) {
+                excludedNoEstimate++;
+                continue;
+            }
+
+            const pct = Math.round((timeLog / timeEst) * 1000) / 10;
+            const adherent = pct <= 110;
+
+            const taskInfo = {
+                task_name: (row[col['Task Name']] || '').trim(),
+                parent_name: (row[col['Parent Name']] || '').trim(),
+                time_estimate: formatTime(timeEst),
+                time_logged: formatTime(timeLog),
+                pct,
+                adherent,
+            };
+
+            for (const assignee of assignees) {
+                if (!assigneeData[assignee]) {
+                    assigneeData[assignee] = { tasks: [], adherent: 0, total: 0 };
+                }
+                assigneeData[assignee].total++;
+                if (adherent) assigneeData[assignee].adherent++;
+                assigneeData[assignee].tasks.push(taskInfo);
+            }
+        }
+
+        const sortedNames = Object.keys(assigneeData).sort();
+        const assigneesList = [];
+        let overallAdherent = 0;
+        let overallTotal = 0;
+
+        for (const name of sortedNames) {
+            const d = assigneeData[name];
+            const adherencePct = d.total > 0 ? round1((d.adherent / d.total) * 100) : 0;
+            overallAdherent += d.adherent;
+            overallTotal += d.total;
+
+            d.tasks.sort((a, b) => {
+                const aSort = a.adherent ? 1 : -1;
+                const bSort = b.adherent ? 1 : -1;
+                if (aSort !== bSort) return aSort - bSort;
+                return b.pct - a.pct;
+            });
+
+            assigneesList.push({
+                name,
+                total_tasks: d.total,
+                adherent_tasks: d.adherent,
+                adherence_pct: adherencePct,
+                tasks: d.tasks,
+            });
+        }
+
+        const overallAdherencePct = overallTotal > 0 ? round1((overallAdherent / overallTotal) * 100) : 0;
+
+        return {
+            summary: {
+                total_complete: totalComplete,
+                total_analyzed: overallTotal,
+                excluded_no_estimate: excludedNoEstimate,
+                excluded_no_assignee: excludedNoAssignee,
+                overall_adherent: overallAdherent,
+                overall_adherence_pct: overallAdherencePct,
+            },
+            assignees: assigneesList,
+        };
+    }
+
+    // Simple CSV parser that handles quoted fields with newlines/commas
+    function csvToRows(text) {
+        const rows = [];
+        let row = [];
+        let field = '';
+        let inQuotes = false;
+        let i = 0;
+
+        while (i < text.length) {
+            const ch = text[i];
+
+            if (inQuotes) {
+                if (ch === '"') {
+                    if (i + 1 < text.length && text[i + 1] === '"') {
+                        field += '"';
+                        i += 2;
+                    } else {
+                        inQuotes = false;
+                        i++;
+                    }
+                } else {
+                    field += ch;
+                    i++;
+                }
+            } else {
+                if (ch === '"') {
+                    inQuotes = true;
+                    i++;
+                } else if (ch === ',') {
+                    row.push(field);
+                    field = '';
+                    i++;
+                } else if (ch === '\r') {
+                    row.push(field);
+                    field = '';
+                    rows.push(row);
+                    row = [];
+                    i++;
+                    if (i < text.length && text[i] === '\n') i++;
+                } else if (ch === '\n') {
+                    row.push(field);
+                    field = '';
+                    rows.push(row);
+                    row = [];
+                    i++;
+                } else {
+                    field += ch;
+                    i++;
+                }
+            }
+        }
+
+        // Last field/row
+        if (field || row.length > 0) {
+            row.push(field);
+            rows.push(row);
+        }
+
+        return rows;
+    }
+
+    // =========================================================
+    // LocalStorage helpers
+    // =========================================================
+
+    function saveData(data) {
+        try {
+            localStorage.setItem(STORAGE_KEY + ':data', JSON.stringify(data));
+        } catch (e) { /* quota exceeded — silent */ }
+    }
+
+    function loadData() {
+        try {
+            const s = localStorage.getItem(STORAGE_KEY + ':data');
+            return s ? JSON.parse(s) : null;
+        } catch { return null; }
+    }
+
+    function saveSettings() {
+        try {
+            localStorage.setItem(STORAGE_KEY + ':settings', JSON.stringify({
+                excluded_assignees: [...excludedAssignees],
+                teams: teams.map(t => ({ name: t.name, members: [...t.members] })),
+            }));
+        } catch (e) { /* silent */ }
+    }
+
+    function loadSettings() {
+        try {
+            const s = localStorage.getItem(STORAGE_KEY + ':settings');
+            return s ? JSON.parse(s) : null;
+        } catch { return null; }
+    }
+
+    // =========================================================
+    // File input handlers
+    // =========================================================
+
     fileInput.addEventListener('change', () => {
         const file = fileInput.files[0];
         if (file) uploadFile(file);
@@ -32,7 +317,6 @@
         });
     });
 
-    // --- Upload ---
     async function uploadFile(file) {
         if (!file.name.toLowerCase().endsWith('.csv')) {
             showError('Please upload a CSV file.');
@@ -44,29 +328,29 @@
         results.classList.add('hidden');
         emptyState.classList.add('hidden');
 
-        const form = new FormData();
-        form.append('csv_file', file);
-
         try {
-            const resp = await fetch('api.php?action=upload', { method: 'POST', body: form });
-            const data = await resp.json();
+            const text = await file.text();
+            const result = parseCSV(text);
 
-            if (!resp.ok) {
-                showError(data.error || 'Unknown error');
+            if (result.error) {
+                showError(result.error);
                 return;
             }
 
-            rawData = data;
+            const now = new Date().toISOString();
+            result.uploaded_at = now;
+
+            rawData = result;
+            saveData(result);
+
             // Reset exclusions for new data, keep teams
             excludedAssignees = new Set();
-            buildConfigPanel(data.assignees);
+            buildConfigPanel(result.assignees);
             applyAndRender();
-            updateUploadInfo(data.uploaded_at);
-
-            // Save clean exclusions for new dataset
+            updateUploadInfo(result.uploaded_at);
             saveSettings();
         } catch (err) {
-            showError('Failed to upload file: ' + err.message);
+            showError('Failed to process file: ' + err.message);
         } finally {
             loading.classList.add('hidden');
         }
@@ -86,52 +370,50 @@
         uploadInfo.textContent = 'Last upload: ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
     }
 
-    // --- Load persisted data on page load ---
+    // =========================================================
+    // Load initial data
+    // =========================================================
+
     async function loadInitialData() {
         try {
-            const [dataResp, settingsResp] = await Promise.all([
-                fetch('api.php?action=data'),
-                fetch('api.php?action=settings'),
-            ]);
+            // Load default teams from teams.json
+            try {
+                const resp = await fetch('teams.json');
+                if (resp.ok) {
+                    const json = await resp.json();
+                    defaultTeams = (json.teams || []).map(t => ({
+                        name: t.name,
+                        members: new Set(t.members),
+                    }));
+                }
+            } catch { /* teams.json not found — that's fine */ }
 
-            const data = await dataResp.json();
-            const settings = await settingsResp.json();
+            // Load persisted settings from localStorage (overrides teams.json)
+            const settings = loadSettings();
+            if (settings) {
+                excludedAssignees = new Set(settings.excluded_assignees || []);
+                teams = (settings.teams || []).map(t => ({
+                    name: t.name,
+                    members: new Set(t.members),
+                }));
+            } else if (defaultTeams.length > 0) {
+                // First visit — use teams.json defaults
+                teams = defaultTeams.map(t => ({ name: t.name, members: new Set(t.members) }));
+            }
 
-            if (data.empty) {
+            // Load persisted CSV data
+            const data = loadData();
+            if (!data) {
                 emptyState.classList.remove('hidden');
                 return;
             }
 
             rawData = data;
-
-            // Restore settings
-            excludedAssignees = new Set(settings.excluded_assignees || []);
-            teams = (settings.teams || []).map(t => ({
-                name: t.name,
-                members: new Set(t.members),
-            }));
-
             buildConfigPanel(data.assignees);
             applyAndRender();
             updateUploadInfo(data.uploaded_at);
         } catch (err) {
             showError('Failed to load data: ' + err.message);
-        }
-    }
-
-    // --- Save settings to server ---
-    async function saveSettings() {
-        try {
-            await fetch('api.php?action=settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    excluded_assignees: [...excludedAssignees],
-                    teams: teams.map(t => ({ name: t.name, members: [...t.members] })),
-                }),
-            });
-        } catch (err) {
-            // Silent fail — settings will be re-saved on next action
         }
     }
 
@@ -190,6 +472,24 @@
         teams.push({ name, members: new Set() });
         input.value = '';
         renderTeams();
+    });
+
+    // Export teams JSON
+    document.getElementById('export-teams-btn').addEventListener('click', () => {
+        const exportData = {
+            teams: teams.map(t => ({ name: t.name, members: [...t.members] })),
+            excluded_assignees: [...excludedAssignees],
+        };
+        const json = JSON.stringify(exportData, null, 2) + '\n';
+        navigator.clipboard.writeText(json).then(() => {
+            const msg = document.getElementById('export-msg');
+            msg.textContent = 'Copied to clipboard! Paste into teams.json and commit.';
+            setTimeout(() => msg.textContent = '', 4000);
+        }).catch(() => {
+            // Fallback: open in a new window
+            const w = window.open('', '_blank');
+            w.document.write('<pre>' + escHtml(json) + '</pre>');
+        });
     });
 
     document.querySelectorAll('input[name="view-mode"]').forEach(radio => {
@@ -601,7 +901,4 @@
     function round1(n) {
         return Math.round(n * 10) / 10;
     }
-
-    // --- Init ---
-    loadInitialData();
 })();
