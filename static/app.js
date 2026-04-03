@@ -284,19 +284,7 @@
     }
 
     function saveSettings() {
-        try {
-            localStorage.setItem(STORAGE_KEY + ':settings', JSON.stringify({
-                excluded_assignees: [...excludedAssignees],
-                teams: teams.map(t => ({ name: t.name, members: [...t.members] })),
-            }));
-        } catch (e) { /* silent */ }
-    }
-
-    function loadSettings() {
-        try {
-            const s = localStorage.getItem(STORAGE_KEY + ':settings');
-            return s ? JSON.parse(s) : null;
-        } catch { return null; }
+        // Settings are driven by teams.json — no localStorage caching
     }
 
     // =========================================================
@@ -376,30 +364,18 @@
 
     async function loadInitialData() {
         try {
-            // Load default teams from teams.json
+            // Always load teams and exclusions from teams.json
             try {
-                const resp = await fetch('teams.json');
+                const resp = await fetch('teams.json', { cache: 'no-cache' });
                 if (resp.ok) {
                     const json = await resp.json();
-                    defaultTeams = (json.teams || []).map(t => ({
+                    teams = (json.teams || []).map(t => ({
                         name: t.name,
                         members: new Set(t.members),
                     }));
+                    excludedAssignees = new Set(json.excluded_assignees || []);
                 }
             } catch { /* teams.json not found — that's fine */ }
-
-            // Load persisted settings from localStorage (overrides teams.json)
-            const settings = loadSettings();
-            if (settings) {
-                excludedAssignees = new Set(settings.excluded_assignees || []);
-                teams = (settings.teams || []).map(t => ({
-                    name: t.name,
-                    members: new Set(t.members),
-                }));
-            } else if (defaultTeams.length > 0) {
-                // First visit — use teams.json defaults
-                teams = defaultTeams.map(t => ({ name: t.name, members: new Set(t.members) }));
-            }
 
             // Load persisted CSV data
             const data = loadData();
