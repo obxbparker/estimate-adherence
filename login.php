@@ -1,5 +1,7 @@
 <?php
-require_once __DIR__ . '/config.php';
+session_start();
+
+define('APP_PASSWORD', getenv('APP_PASSWORD') ?: 'outerbox2026');
 
 $error = '';
 
