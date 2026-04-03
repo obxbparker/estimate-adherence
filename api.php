@@ -1,9 +1,5 @@
 <?php
-session_start();
-
-define('APP_PASSWORD', getenv('APP_PASSWORD') ?: 'outerbox2026');
-define('DATA_DIR', __DIR__ . '/data');
-define('DB_PATH', DATA_DIR . '/data.db');
+require_once __DIR__ . '/config.php';
 
 // --- Auth check ---
 if (empty($_SESSION['authenticated'])) {
