@@ -148,6 +148,7 @@
                 task_name: (row[col['Task Name']] || '').trim(),
                 parent_name: (row[col['Parent Name']] || '').trim(),
                 parent_url: (row[col['Parent URL']] || '').trim(),
+                folder: (row[col['Folder']] || '').trim(),
                 time_estimate: formatTime(timeEst),
                 time_logged: formatTime(timeLog),
                 pct,
@@ -808,6 +809,7 @@
             <thead><tr>
                 <th>Task</th>
                 <th>Parent</th>
+                <th>Folder</th>
                 ${memberHeader}
                 <th>Estimate</th>
                 <th>Logged</th>
@@ -825,6 +827,7 @@
             html += `<tr class="${rowClass}">
                 <td>${escHtml(t.task_name)}</td>
                 <td>${t.parent_url ? `<a href="${escHtml(t.parent_url)}" target="_blank" rel="noopener">${escHtml(t.parent_name)}</a>` : escHtml(t.parent_name)}</td>
+                <td>${escHtml(t.folder)}</td>
                 ${memberCell}
                 <td>${escHtml(t.time_estimate)}</td>
                 <td>${escHtml(t.time_logged)}</td>
