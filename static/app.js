@@ -147,6 +147,7 @@
             const taskInfo = {
                 task_name: (row[col['Task Name']] || '').trim(),
                 parent_name: (row[col['Parent Name']] || '').trim(),
+                parent_url: (row[col['Parent URL']] || '').trim(),
                 time_estimate: formatTime(timeEst),
                 time_logged: formatTime(timeLog),
                 pct,
@@ -823,7 +824,7 @@
 
             html += `<tr class="${rowClass}">
                 <td>${escHtml(t.task_name)}</td>
-                <td>${escHtml(t.parent_name)}</td>
+                <td>${t.parent_url ? `<a href="${escHtml(t.parent_url)}" target="_blank" rel="noopener">${escHtml(t.parent_name)}</a>` : escHtml(t.parent_name)}</td>
                 ${memberCell}
                 <td>${escHtml(t.time_estimate)}</td>
                 <td>${escHtml(t.time_logged)}</td>

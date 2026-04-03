@@ -566,6 +566,15 @@ tr.detail-row td {
     border-bottom: 1px solid #e5e7eb;
 }
 
+.detail-table a {
+    color: #3b82f6;
+    text-decoration: none;
+}
+
+.detail-table a:hover {
+    text-decoration: underline;
+}
+
 .detail-table tr.over-estimate {
     color: #dc2626;
     background: #fef2f2;
