@@ -1,4 +1,87 @@
 {
-  "teams": [],
-  "excluded_assignees": []
+  "teams": [
+    {
+      "name": "SEO",
+      "members": [
+        "Jacob Banda",
+        "Daniel Stephan",
+        "Tanner Reeling",
+        "Nhung Holmes",
+        "Lee Valenzuela",
+        "Emeli Garcia",
+        "Ryan Overholt"
+      ]
+    },
+    {
+      "name": "UX",
+      "members": [
+        "Michael Helvey",
+        "Aidan Aarts",
+        "Trace Sheets"
+      ]
+    },
+    {
+      "name": "Contractors",
+      "members": [
+        "Najmul Khan",
+        "Priscarl Canlas",
+        "Luis Enrique Morales"
+      ]
+    }
+  ],
+  "excluded_assignees": [
+    "Adrianna Hanzak",
+    "Anders Amdahl",
+    "Avinash Rawat",
+    "Bhavya Malik",
+    "Chris  Smashe",
+    "Chris Meese",
+    "CJ Stamatakos",
+    "Claire Routh",
+    "Colin Gacek",
+    "Destiny Boulet",
+    "DO NOT USE AJ Cassapo",
+    "DO NOT USE Amy Lewis",
+    "DO NOT USE Noah Bramlett",
+    "DO NOT USE Sofya Perrin",
+    "Eric Nuchereno",
+    "Eshcole Peets",
+    "Hayley Dwy",
+    "Jake Reeves",
+    "Jared Heller",
+    "John Battaglini",
+    "John Imler",
+    "Jose Gomez",
+    "Katie Boyd",
+    "Katie Fajer",
+    "Kaylee Lambert",
+    "Kelly Grimes",
+    "Laine Biagi",
+    "Lindsey Potter",
+    "Lydia Clauson",
+    "Madeline Piller",
+    "Madison Deane",
+    "Maggie Lowery",
+    "Mark Tejeda",
+    "Matt Milligan",
+    "Matt Wilson",
+    "Melody Tran",
+    "Michael Romero",
+    "Munish Pal Singh",
+    "Neha Mathur",
+    "Nicholas Velarde",
+    "Nick Kopp",
+    "Nolan Zenker",
+    "Pawan Kumar",
+    "Quincy Richmond",
+    "Richie Koesnady",
+    "Robin Cooney",
+    "Savi Gessner (Bhajan)",
+    "Sergio Benavides",
+    "Shawn Breyer",
+    "Shonna Godoy",
+    "Sophia Martinez",
+    "Taylor Keeran",
+    "Tristen Pursley"
+  ]
 }
