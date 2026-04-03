@@ -331,8 +331,7 @@
             rawData = result;
             saveData(result);
 
-            // Reset exclusions for new data, keep teams
-            excludedAssignees = new Set();
+            // Keep exclusions from teams.json
             buildConfigPanel(result.assignees);
             applyAndRender();
             updateUploadInfo(result.uploaded_at);
