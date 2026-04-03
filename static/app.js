@@ -784,8 +784,12 @@
             const detailTr = document.createElement('tr');
             detailTr.className = 'detail-row';
             detailTr.id = 'detail-' + idx;
+            detailTr.addEventListener('click', (e) => e.stopPropagation());
             const showMember = assignee.is_team;
-            detailTr.innerHTML = `<td colspan="4">${buildDetailTable(assignee.tasks, showMember)}</td>`;
+            const detailTd = document.createElement('td');
+            detailTd.colSpan = 4;
+            detailTd.appendChild(buildDetailTable(assignee.tasks, showMember));
+            detailTr.appendChild(detailTd);
             tbody.appendChild(detailTr);
         });
     }
@@ -804,40 +808,94 @@
     }
 
     function buildDetailTable(tasks, showMember) {
-        const memberHeader = showMember ? '<th>Assignee</th>' : '';
-        let html = `<table class="detail-table">
-            <thead><tr>
-                <th>Task</th>
-                <th>Parent</th>
-                <th>Folder</th>
-                ${memberHeader}
-                <th>Estimate</th>
-                <th>Logged</th>
-                <th>% of Est.</th>
-                <th>Status</th>
-            </tr></thead><tbody>`;
+        const columns = [
+            { key: 'task_name', label: 'Task' },
+            { key: 'parent_name', label: 'Parent' },
+            { key: 'folder', label: 'Folder' },
+            ...(showMember ? [{ key: 'member_name', label: 'Assignee' }] : []),
+            { key: 'time_estimate', label: 'Estimate' },
+            { key: 'time_logged', label: 'Logged' },
+            { key: 'pct', label: '% of Est.' },
+            { key: 'adherent', label: 'Status' },
+        ];
 
-        for (const t of tasks) {
-            const rowClass = t.adherent ? 'at-estimate' : 'over-estimate';
-            const icon = t.adherent
-                ? '<span class="status-icon status-pass">\u2713</span>'
-                : '<span class="status-icon status-fail">\u2717</span>';
-            const memberCell = showMember ? `<td>${escHtml(t.member_name || '')}</td>` : '';
+        let detailSortCol = null;
+        let detailSortAsc = true;
 
-            html += `<tr class="${rowClass}">
-                <td>${escHtml(t.task_name)}</td>
-                <td>${t.parent_url ? `<a href="${escHtml(t.parent_url)}" target="_blank" rel="noopener">${escHtml(t.parent_name)}</a>` : escHtml(t.parent_name)}</td>
-                <td>${escHtml(t.folder)}</td>
-                ${memberCell}
-                <td>${escHtml(t.time_estimate)}</td>
-                <td>${escHtml(t.time_logged)}</td>
-                <td>${t.pct}%</td>
-                <td>${icon}</td>
-            </tr>`;
+        const table = document.createElement('table');
+        table.className = 'detail-table';
+
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        columns.forEach(col => {
+            const th = document.createElement('th');
+            th.innerHTML = `${escHtml(col.label)} <span class="sort-arrow"></span>`;
+            th.style.cursor = 'pointer';
+            th.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (detailSortCol === col.key) {
+                    detailSortAsc = !detailSortAsc;
+                } else {
+                    detailSortCol = col.key;
+                    detailSortAsc = col.key === 'task_name' || col.key === 'parent_name' || col.key === 'folder' || col.key === 'member_name';
+                }
+                // Update arrows
+                headerRow.querySelectorAll('.sort-arrow').forEach(a => a.textContent = '');
+                th.querySelector('.sort-arrow').textContent = detailSortAsc ? '\u25B2' : '\u25BC';
+                renderDetailBody();
+            });
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        table.appendChild(tbody);
+
+        function getSortValue(t, key) {
+            if (key === 'time_estimate' || key === 'time_logged') return parseTime(t[key]);
+            return t[key];
         }
 
-        html += '</tbody></table>';
-        return html;
+        function renderDetailBody() {
+            const sorted = [...tasks];
+            if (detailSortCol) {
+                sorted.sort((a, b) => {
+                    let va = getSortValue(a, detailSortCol);
+                    let vb = getSortValue(b, detailSortCol);
+                    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+                    if (typeof va === 'boolean') { va = va ? 1 : 0; vb = vb ? 1 : 0; }
+                    if (va < vb) return detailSortAsc ? -1 : 1;
+                    if (va > vb) return detailSortAsc ? 1 : -1;
+                    return 0;
+                });
+            }
+
+            tbody.innerHTML = '';
+            for (const t of sorted) {
+                const tr = document.createElement('tr');
+                tr.className = t.adherent ? 'at-estimate' : 'over-estimate';
+                const icon = t.adherent
+                    ? '<span class="status-icon status-pass">\u2713</span>'
+                    : '<span class="status-icon status-fail">\u2717</span>';
+
+                let cells = `
+                    <td>${escHtml(t.task_name)}</td>
+                    <td>${t.parent_url ? `<a href="${escHtml(t.parent_url)}" target="_blank" rel="noopener">${escHtml(t.parent_name)}</a>` : escHtml(t.parent_name)}</td>
+                    <td>${escHtml(t.folder)}</td>`;
+                if (showMember) cells += `<td>${escHtml(t.member_name || '')}</td>`;
+                cells += `
+                    <td>${escHtml(t.time_estimate)}</td>
+                    <td>${escHtml(t.time_logged)}</td>
+                    <td>${t.pct}%</td>
+                    <td>${icon}</td>`;
+                tr.innerHTML = cells;
+                tbody.appendChild(tr);
+            }
+        }
+
+        renderDetailBody();
+        return table;
     }
 
     function sortAssignees(assignees) {
