@@ -69,9 +69,9 @@
 
     // Config state
     let excludedAssignees = new Set();
+    let managers = new Set();
     let teams = [];
     let viewMode = 'individual';
-    let defaultTeams = []; // from teams.json
 
     // =========================================================
     // CSV Parsing (ported from PHP)
@@ -127,10 +127,19 @@
 
             totalComplete++;
 
-            const assignees = parseAssignees(row[col['Assignee']] || '');
+            let assignees = parseAssignees(row[col['Assignee']] || '');
+            // Remove excluded assignees
+            assignees = assignees.filter(a => !excludedAssignees.has(a));
             if (assignees.length === 0) {
                 excludedNoAssignee++;
                 continue;
+            }
+            // Manager rule: if multiple assignees and some are managers,
+            // only keep non-managers (managers are mentoring, not doing the task).
+            // If ALL are managers, keep them all (it's their task).
+            if (assignees.length > 1) {
+                const nonManagers = assignees.filter(a => !managers.has(a));
+                if (nonManagers.length > 0) assignees = nonManagers;
             }
 
             const timeEst = parseTime(row[col['Time Estimate']] || '');
@@ -375,6 +384,7 @@
                         members: new Set(t.members),
                     }));
                     excludedAssignees = new Set(json.excluded_assignees || []);
+                    managers = new Set(json.managers || []);
                 }
             } catch { /* teams.json not found — that's fine */ }
 
