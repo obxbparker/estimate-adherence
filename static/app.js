@@ -70,6 +70,8 @@
     // Config state
     let excludedAssignees = new Set();
     let managers = new Set();
+    let excludedParentPatterns = [];
+    let excludedSiblingTasks = [];
     let teams = [];
     let viewMode = 'individual';
 
@@ -115,10 +117,39 @@
         const col = {};
         headers.forEach((h, i) => col[h] = i);
 
+        // --- Pass 1: identify excluded parents ---
+        // Build a map of parent names → set of subtask names (for sibling rule)
+        const parentSubtasks = {};
+        for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            const parentName = (row[col['Parent Name']] || '').trim();
+            const taskName = (row[col['Task Name']] || '').trim();
+            if (parentName) {
+                if (!parentSubtasks[parentName]) parentSubtasks[parentName] = new Set();
+                parentSubtasks[parentName].add(taskName);
+            }
+        }
+
+        // Build set of excluded parent names
+        const excludedParents = new Set();
+        for (const [parentName, subtasks] of Object.entries(parentSubtasks)) {
+            // Rule 1: parent name matches a pattern
+            if (excludedParentPatterns.some(p => parentName.includes(p))) {
+                excludedParents.add(parentName);
+                continue;
+            }
+            // Rule 2: parent has a sibling task matching excluded sibling list
+            if (excludedSiblingTasks.some(s => subtasks.has(s))) {
+                excludedParents.add(parentName);
+            }
+        }
+
+        // --- Pass 2: process tasks ---
         const assigneeData = {};
         let totalComplete = 0;
         let excludedNoEstimate = 0;
         let excludedNoAssignee = 0;
+        let excludedInvestigation = 0;
 
         for (let r = 1; r < rows.length; r++) {
             const row = rows[r];
@@ -126,6 +157,13 @@
             if (status.toLowerCase() !== 'complete') continue;
 
             totalComplete++;
+
+            // Check parent exclusion
+            const parentName = (row[col['Parent Name']] || '').trim();
+            if (excludedParents.has(parentName)) {
+                excludedInvestigation++;
+                continue;
+            }
 
             let assignees = parseAssignees(row[col['Assignee']] || '');
             // Remove excluded assignees
@@ -155,7 +193,7 @@
 
             const taskInfo = {
                 task_name: (row[col['Task Name']] || '').trim(),
-                parent_name: (row[col['Parent Name']] || '').trim(),
+                parent_name: parentName,
                 parent_url: (row[col['Parent URL']] || '').trim(),
                 folder: (row[col['Folder']] || '').trim(),
                 time_estimate: formatTime(timeEst),
@@ -209,6 +247,7 @@
                 total_analyzed: overallTotal,
                 excluded_no_estimate: excludedNoEstimate,
                 excluded_no_assignee: excludedNoAssignee,
+                excluded_investigation: excludedInvestigation,
                 overall_adherent: overallAdherent,
                 overall_adherence_pct: overallAdherencePct,
             },
@@ -385,6 +424,8 @@
                     }));
                     excludedAssignees = new Set(json.excluded_assignees || []);
                     managers = new Set(json.managers || []);
+                    excludedParentPatterns = json.excluded_parent_patterns || [];
+                    excludedSiblingTasks = json.excluded_sibling_tasks || [];
                 }
             } catch { /* teams.json not found — that's fine */ }
 
@@ -695,7 +736,7 @@
         document.getElementById('stat-adherent').textContent = s.overall_adherent.toLocaleString();
         document.getElementById('stat-adherence-pct').textContent = s.overall_adherence_pct + '%';
 
-        const excludedTotal = (s.excluded_no_estimate || 0) + (s.excluded_no_assignee || 0) + (s.excluded_by_user || 0);
+        const excludedTotal = (s.excluded_no_estimate || 0) + (s.excluded_no_assignee || 0) + (s.excluded_by_user || 0) + (s.excluded_investigation || 0);
         document.getElementById('stat-excluded').textContent = excludedTotal.toLocaleString();
 
         renderChart(data.assignees);

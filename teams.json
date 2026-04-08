@@ -1,5 +1,7 @@
 {
   "managers": ["Sadie Saurdiff", "Michael Helvey", "Jacob Banda", "Bradley Parker"],
+  "excluded_parent_patterns": ["FE Issue Investigation"],
+  "excluded_sibling_tasks": ["Confirm Request & Estimate Time"],
   "teams": [
     {
       "name": "SEO",
